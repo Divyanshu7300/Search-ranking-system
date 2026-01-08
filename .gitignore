@@ -1,0 +1,24 @@
+# OS files
+.DS_Store
+
+# Virtual environment
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (VERY IMPORTANT)
+data/
+notebooks/data/
+
+# Outputs
+*.csv
+*.zip
+*.jsonl
+venv/
+__pycache__/
+.ipynb_checkpoints/
+data/raw/
+data/processed/
+*.csv
+

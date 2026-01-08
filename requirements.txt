@@ -1,0 +1,20 @@
+# Core
+numpy
+pandas
+
+# IR & Ranking
+rank-bm25
+beir
+ranx
+
+# Feature Engineering
+scikit-learn
+
+# Learning to Rank
+xgboost
+
+# Utilities
+tqdm
+
+# Jupyter
+notebook

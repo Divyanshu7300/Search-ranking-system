@@ -1,164 +1,269 @@
-## Search Ranking System using BM25 and Learning-to-Rank
+# Search Ranking System using BM25 and Learning-to-Rank
 
-### Overview
+## Overview
 
-This project implements an end-to-end **search ranking system** that retrieves and ranks documents for user queries.
-It begins with a traditional Information Retrieval baseline (BM25) and improves ranking quality using a machine learning based **Learning-to-Rank (LTR)** model.
+This project builds a reproducible search ranking pipeline on the BEIR MS MARCO `dev` split.
+It starts with a BM25 baseline, adds compact lexical and semantic query-document features, trains a logistic-regression reranker, and compares both standalone and hybrid ranking outputs on a held-out query split.
 
-The project focuses on **evaluation, failure analysis, and evidence-based model selection**, similar to real-world search systems.
+The code is organized under `src/` so the same experiment can be run from the CLI or from the notebooks without relying on hidden notebook state.
 
----
+The current version also adds:
 
-## Problem Statement
+* resumable dataset downloads and safer dataset extraction checks
+* query-level `5`-fold cross-validation for logistic-regression hyperparameter tuning
+* validation-based feature selection
+* explicit missing-value and non-finite-value handling through imputation
+* saved model artifacts plus a simple custom-query testing CLI
 
-The goal is to build a ranking pipeline that:
+## What This Version Fixes
 
-* Retrieves relevant documents for a given query
-* Orders them effectively
-* Improves over keyword-based retrieval using machine learning
+Compared with the earlier notebook-only flow, this version makes the experiment more trustworthy:
 
----
+* query-level train/test splitting happens before model training
+* TF-IDF is fit without leaking held-out query text into training
+* metrics are computed against the original BEIR `qrels`
+* test-time reranking uses BM25-retrieved candidates only
+* notebooks can run from a fresh kernel
+* CLI runs now show progress bars for long stages
 
-## Dataset
+## Project Structure
 
-* **Dataset:** MS MARCO (BEIR framework, dev split)
-* **Queries:** ~7,000
-* **Documents:** Filtered subset based on relevance judgments
-* **Labels:** Binary relevance (relevant / non-relevant)
+* `src/ranking_system/`
+  Shared pipeline code for data loading, retrieval, features, modeling, and evaluation
+* `src/run_pipeline.py`
+  CLI entry point
+* `notebooks/`
+  Thin notebooks for inspecting baseline, features, LTR results, and hybrid results
+* `data/raw/`
+  Downloaded dataset files
+* `data/processed/`
+  Generated feature tables and ranked outputs
+* `data/experiments/`
+  Metrics and split metadata
 
-The dataset contains real search queries and document passages.
+## Pipeline
 
----
+1. Load or download BEIR MS MARCO
+2. Sample a fixed set of judged queries
+3. Split sampled queries into train and test sets
+4. Build a BM25 index over the chosen corpus slice
+5. Evaluate BM25 on held-out queries
+6. Build LTR training rows from positives plus BM25 negatives
+7. Build test rows from BM25-retrieved candidates
+8. Tune logistic-regression hyperparameters with query-level `5`-fold cross-validation
+9. Select a compact feature subset using validation `ndcg@10`
+10. Train the final logistic-regression reranker with imputation and scaling
+11. Tune a weighted BM25-LTR blend on the training split
+12. Evaluate BM25, LTR, and hybrid runs on held-out queries
 
-## Project Pipeline
+## Features Used
 
-The system is built in the following stages:
-
-1. BM25 baseline retrieval
-2. Feature engineering for query–document pairs
-3. Learning-to-Rank (LTR) model training
-4. Evaluation using ranking metrics
-5. Failure analysis and hybrid ranking experiment
-
----
-
-## Phase 1 — BM25 Baseline
-
-BM25 was implemented as the initial lexical baseline to rank documents using keyword matching.
-
-**Results (approximate):**
-
-* NDCG@10 ≈ 0.68
-* MAP ≈ 0.64
-
-This baseline served as a reference point for improvement.
-
----
-
-## Phase 2 — Feature Engineering
-
-A Learning-to-Rank dataset was constructed using query–document pairs.
-
-**Features used:**
+The rerankers use a compact feature set that mixes lexical, semantic, and structural signals:
 
 * TF-IDF cosine similarity
-* BM25 score
-* Token overlap count
-* Overlap ratio
+* sentence-transformer cosine similarity
+* log-compressed BM25 score
+* reciprocal BM25 rank
+* common-term overlap and query coverage
+* IDF-weighted overlap
+* query length, document length, and length ratio
 
-Query-level splits were used to avoid data leakage between training and testing.
+The raw BM25 score is also preserved in the output files for analysis and hybrid scoring.
 
----
+Current selected feature subset from the latest saved run:
 
-## Phase 3 — Learning-to-Rank (Final Model)
+* `tfidf`
+* `semantic_similarity`
+* `bm25_feature`
+* `common_terms`
+* `overlap_ratio`
+* `idf_overlap`
+* `doc_length_feature`
+* `query_length_feature`
+* `length_ratio`
 
-A **Logistic Regression** model was trained to predict the relevance of a document given a query.
+## Models
 
-The predicted probability was used directly as the ranking score.
+* `BM25`
+  Lexical retrieval baseline
+* `Logistic Regression`
+  Lightweight pointwise reranker with median imputation, standardization, `5`-fold CV tuning, and validation-based feature selection
+* `Hybrid`
+  Alpha-tuned weighted blend of BM25 and Logistic Regression LTR scores
 
-**Results:**
+## Setup
 
-* NDCG@10 ≈ 0.83
-* MAP ≈ 0.77
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-The LTR model significantly outperformed the BM25 baseline and was selected as the **final ranking system**.
+## How To Run
 
----
+Quick smoke test:
 
-## Failure Analysis
+```bash
+python src/run_pipeline.py --profile tiny
+```
 
-Query-wise failure analysis was performed by comparing BM25 and LTR rankings.
+Recommended main local experiment:
 
-Key observations:
+```bash
+venv/bin/python src/run_pipeline.py --profile medium --sample-size 500 --max-docs 500000 --test-size 0.1 --positives-per-query 2 --negatives-per-query 12
+```
 
-* BM25 performs better on exact-match and factoid queries
-* LTR performs better on broader or semantic queries
-* Some errors are caused by ambiguous queries or noisy relevance labels
+If you manually download the dataset from another source such as Kaggle, you can bypass the default BEIR download:
 
-This analysis helped explain model behavior beyond aggregate metrics.
+```bash
+venv/bin/python src/run_pipeline.py --profile medium --dataset-zip /absolute/path/to/msmarco.zip
+```
 
----
+If you already have the extracted dataset folder, point directly to it:
 
-## Hybrid Ranking Experiment
+```bash
+venv/bin/python src/run_pipeline.py --profile medium --dataset-dir /absolute/path/to/msmarco
+```
 
-A **BM25-gated hybrid ranking** strategy was explored.
+Faster development run:
 
-In this approach:
+```bash
+venv/bin/python src/run_pipeline.py --profile medium --sample-size 500 --max-docs 100000 --test-size 0.1 --positives-per-query 2 --negatives-per-query 12
+```
 
-* Queries with strong lexical signals rely on BM25
-* Other queries rely on the LTR model
+Quick end-to-end verification:
 
-However, the hybrid approach did **not outperform the LTR model**.
-Since BM25 was already included as a feature in the LTR model, the hybrid did not introduce a sufficiently new signal.
+```bash
+venv/bin/python src/run_pipeline.py --profile tiny
+```
 
-Based on empirical evaluation, the **LTR model was retained as the final system**.
+Note:
+larger corpus slices make feature generation much slower, so `100k` is a good tuning setup and `500k` is a stronger final evaluation setup on a laptop.
 
----
+## Custom Query Testing
 
-## Final Conclusion
+After a successful pipeline run, you can test the saved model on your own query:
 
-This project demonstrates the complete lifecycle of building a search ranking system:
+```bash
+venv/bin/python src/test_model.py --query "best budget gaming laptop" --mode hybrid --top-k 5
+```
 
-* Starting from a classical IR baseline
-* Improving with machine learning
-* Making decisions based on evaluation and failure analysis
+Modes:
 
-The final model choice was driven by measured performance rather than assumptions.
+* `bm25`
+  Show BM25-only ranking
+* `ltr`
+  Show logistic-regression reranking
+* `hybrid`
+  Show the tuned BM25-LTR blend
 
----
+The script prints document ids, scores, titles, and text previews for the top results.
 
-## Technologies Used
+## Profiles
 
-* Python
-* scikit-learn
-* BM25 (rank-bm25)
-* BEIR / MS MARCO
-* pandas, numpy
-* ranx (evaluation metrics)
+* `tiny`
+  Fast verification run for checking that the pipeline works end-to-end
+* `medium`
+  Recommended main experiment profile for local runs
+* `full`
+  Very heavy configuration intended for larger experiments
 
----
+## Reference Results
 
-## Key Takeaways
+Latest saved reference run:
 
-* Learning-to-Rank can significantly outperform lexical baselines
-* Hybrid ranking is not always beneficial
-* Failure analysis is essential for understanding ranking behavior
-* Negative experimental results are valuable when properly analyzed
+Command:
 
----
+```bash
+venv/bin/python src/run_pipeline.py --profile medium --sample-size 500 --max-docs 500000 --test-size 0.1 --positives-per-query 2 --negatives-per-query 12
+```
 
-## How to Run
+Results:
 
-1. Run the BM25 baseline notebook
-2. Generate the feature dataset
-3. Train the Learning-to-Rank model
-4. Evaluate results and perform failure analysis
+* split: `450 train / 50 test`
+* feature rows: `10872`
+* logistic tuning: `5-fold CV`, best params = `C=0.5`, `solver=liblinear`, `class_weight=balanced`
+* feature selection: `9` selected features, best CV `ndcg@10 = 0.9330`
+* BM25: `ndcg@10 = 0.4414`, `map = 0.4123`
+* Logistic Regression LTR: `ndcg@10 = 0.5656`, `map = 0.5207`
+* Hybrid: `ndcg@10 = 0.5656`, `map = 0.5207`
+* best hybrid alpha: `0.0`
 
----
+Interpretation:
 
-## Final Note
+* the tuned logistic-regression reranker still clearly beats the BM25 baseline on the saved `500k` run
+* BM25 remains a strong lexical baseline and candidate generator
+* the saved hybrid selected `alpha = 0.0`, so it collapsed to the standalone reranker on this run
+* the most defensible final model in the current codebase is still the logistic-regression LTR reranker, now with tuning, diagnostics, and feature selection
 
-This project emphasizes clarity, correctness, and reasoning over over-optimization.
-It reflects practical machine learning and search system design decisions.
+## Generated Artifacts
 
----
+After each successful run, the main outputs are:
+
+* `data/processed/features_ltr.csv`
+  Query-document feature table
+* `data/processed/ltr_ranked_results.csv`
+  Candidate rows with reranker scores
+* `data/processed/hybrid_ranked_results.csv`
+  Candidate rows with hybrid scores
+* `data/experiments/bm25_metrics.json`
+  BM25 metrics
+* `data/experiments/feature_diagnostics.json`
+  Missing-value summary, correlation matrix, feature importance, tuning, and feature-selection details
+* `data/experiments/ltr_metrics.json`
+  LTR metrics
+* `data/experiments/hybrid_metrics.json`
+  Hybrid metrics
+* `data/experiments/logistic_model.joblib`
+  Saved trained reranker for reuse in query testing
+* `data/experiments/query_split.json`
+  Saved train/test split
+* `data/experiments/run_config.json`
+  Saved pipeline configuration used to produce the current artifacts
+* `data/experiments/summary.json`
+  Compact summary
+
+## Notebooks
+
+The notebooks now act as lightweight inspection layers:
+
+* `notebooks/01_bm25_baseline.ipynb`
+  Run the medium configuration and view BM25 baseline metrics
+* `notebooks/02_feature_diagnostics.ipynb`
+  Inspect generated features, missing values, correlations, and diagnostics
+* `notebooks/03_ltr_tuning_and_selection.ipynb`
+  Inspect reranker metrics, selected hyperparameters, and selected features
+* `notebooks/04_hybrid_ranking.ipynb`
+  Run the medium configuration and inspect weighted BM25-LTR hybrid results
+* `notebooks/05_user_query_testing.ipynb`
+  Test the saved model on a custom query and inspect readable ranked outputs
+
+## Current Takeaways
+
+* BM25 remains a strong baseline and candidate generator
+* semantic similarity and IDF-heavy lexical signals carry a lot of weight in the saved reranker
+* the current codebase now has basic ML hygiene for this scale: `5`-fold tuning, feature selection, diagnostics, and imputation
+* the current best saved result is still from the logistic-regression LTR model
+* the hybrid is available as a blended alternative, but in the latest saved run it collapses to the same effective ranking as LTR
+
+## What Improved
+
+Compared with the original notebook-heavy version, the current codebase now includes:
+
+* resumable dataset downloads and safer extraction checks
+* query-level `5`-fold hyperparameter tuning for the logistic-regression reranker
+* validation-based feature selection
+* explicit missing-value and non-finite-value handling with median imputation
+* saved feature diagnostics, correlation summaries, and coefficient importance
+* saved model artifacts for reuse in custom query testing
+* a user-facing CLI for testing new queries against the saved model
+* renamed and simplified notebooks aligned with the current pipeline
+* path handling fixes so notebooks reuse the repo-root dataset instead of trying to rebuild local copies
+
+## Known Limitations
+
+* the semantic feature stage still depends on the `sentence-transformers` model and may need `huggingface.co` access on first use if the model is not cached
+* the learned reranker is still `LogisticRegression`; stronger ranking models such as `LightGBM` or `LambdaMART` are not implemented yet
+* the current validation setup is much better than before, but it is still offline experimentation rather than full production validation
+* there is no serving/API layer, online feedback loop, or A/B testing framework yet
+* the hybrid model is available, but in the latest saved run it selected `alpha = 0.0`, so it behaved the same as the standalone LTR reranker

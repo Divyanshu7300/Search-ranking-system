@@ -9,12 +9,11 @@ ranx
 
 # Feature Engineering
 scikit-learn
-
-# Learning to Rank
-xgboost
+sentence-transformers
 
 # Utilities
 tqdm
+requests
 
 # Jupyter
 notebook

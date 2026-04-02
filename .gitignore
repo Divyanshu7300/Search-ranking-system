@@ -1,24 +1,24 @@
 # OS files
 .DS_Store
+.vscode/
 
-# Virtual environment
+# Virtual environments
 venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Data (VERY IMPORTANT)
+# Project data and generated experiment artifacts
 data/
 notebooks/data/
 
-# Outputs
-*.csv
-*.zip
-*.jsonl
-venv/
-__pycache__/
-.ipynb_checkpoints/
-data/raw/
-data/processed/
-*.csv
-
+# Local caches and model artifacts
+.cache/
+*.joblib
+*.log

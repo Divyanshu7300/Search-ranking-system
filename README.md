@@ -262,19 +262,6 @@ The notebooks now act as lightweight inspection layers:
 * the current best saved result is still from the logistic-regression LTR model
 * the hybrid is available as a blended alternative, but in the latest saved run it collapses to the same effective ranking as LTR
 
-## What Improved
-
-Compared with the original notebook-heavy version, the current codebase now includes:
-
-* resumable dataset downloads and safer extraction checks
-* query-level `5`-fold hyperparameter tuning for the logistic-regression reranker
-* validation-based feature selection
-* explicit missing-value and non-finite-value handling with median imputation
-* saved feature diagnostics, correlation summaries, and coefficient importance
-* saved model artifacts for reuse in custom query testing
-* a user-facing CLI for testing new queries against the saved model
-* renamed and simplified notebooks aligned with the current pipeline
-* path handling fixes so notebooks reuse the repo-root dataset instead of trying to rebuild local copies
 
 ## Known Limitations
 

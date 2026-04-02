@@ -26,6 +26,22 @@ Compared with the earlier notebook-only flow, this version makes the experiment 
 * notebooks can run from a fresh kernel
 * CLI runs now show progress bars for long stages
 
+## What Improved From The Starting Version
+
+Compared with the original base version, this project is now much more robust and reusable:
+
+* the workflow moved from notebook-heavy execution to a shared CLI plus reusable `src/` pipeline
+* dataset handling is safer, with resumable downloads, zip validation, and incomplete extraction recovery
+* query-level train/test splitting is explicit, which reduces leakage risk
+* BM25, feature engineering, reranking, evaluation, and hybrid scoring are separated into maintainable modules
+* logistic-regression training now includes query-level `5`-fold cross-validation for hyperparameter tuning
+* validation-based feature selection was added instead of relying only on a fixed feature list
+* missing values and non-finite values are now handled explicitly before model fitting
+* feature diagnostics now capture missing counts, correlations, selected features, and coefficient importance
+* trained model artifacts are saved and can be reused for custom-query testing
+* notebooks were reorganized so they inspect saved artifacts instead of depending on hidden execution state
+* a custom-query testing flow was added through both CLI and notebook interfaces
+
 ## Project Structure
 
 * `src/ranking_system/`

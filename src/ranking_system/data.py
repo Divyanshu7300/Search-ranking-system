@@ -183,12 +183,16 @@ def maybe_limit_corpus(corpus: Corpus, qrels: Qrels, config: PipelineConfig) -> 
     selected_doc_ids = list(judged_doc_ids[: config.max_docs])
 
     if len(selected_doc_ids) < config.max_docs:
-        for doc_id in sorted(corpus):
-            if doc_id in judged_doc_ids:
-                continue
+         remaining_docs = [doc_id for doc_id in corpus if doc_id not in judged_doc_ids]
+
+        rng = random.Random(config.random_state)
+        rng.shuffle(remaining_docs)
+
+        for doc_id in remaining_docs:
             selected_doc_ids.append(doc_id)
             if len(selected_doc_ids) >= config.max_docs:
                 break
+
 
     selected_doc_ids_set = set(selected_doc_ids)
     limited_corpus = {doc_id: corpus[doc_id] for doc_id in selected_doc_ids}
@@ -227,3 +231,22 @@ def split_query_ids(sampled_queries: Queries, config: PipelineConfig) -> Tuple[l
 
 def subset_qrels(qrels: Qrels, query_ids: Iterable[str]) -> Qrels:
     return {qid: qrels[qid] for qid in query_ids if qid in qrels}
+
+# # Example dataset
+
+# corpus = {
+#     "d1": {"text": "gaming laptop for programming are laptop with good performance"},
+#     "d2": {"text": "python tutorial for beginners are a great way to learn programming"},
+#     "d3": {"text": "weight loss tips for healthy living are important for overall wellness"},
+#     "d4": {"text": "random blog post about cooking and travel are not relevant to the person looking for a peach tree in their backyard"},
+# }
+
+# queries = {
+#     "q1": "best laptop",
+#     "q2": "learn python"
+# }
+
+# qrels = {
+#     "q1": {"d1": 1},   # q1 ke liye d1 relevant hai
+#     "q2": {"d2": 1}    # q2 ke liye d2 relevant hai
+# }
